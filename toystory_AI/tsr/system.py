@@ -18,16 +18,21 @@ from .utils import (
     find_class,
     get_spherical_cameras,
     scale_tensor,
+    remove_background  # 이미 정의된 remove_background 함수 임포트
 )
 import openai
 import requests
 import base64
 from io import BytesIO
+import rembg  # rembg 임포트
 
 # 발급받은 API 키 설정
-OPENAI_API_KEY = '본인 API 키 입력'
+OPENAI_API_KEY = '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'
 # openai API 키 인증
 openai.api_key = OPENAI_API_KEY
+
+# Initialize rembg session
+rembg_session = rembg.new_session()
 
 class TSR(BaseModule):
     @dataclass
@@ -46,6 +51,7 @@ class TSR(BaseModule):
         renderer_cls: str
         renderer: dict
     cfg: Config
+    
     @classmethod
     def from_pretrained(
         cls, pretrained_model_name_or_path: str, config_name: str, weight_name: str
@@ -66,6 +72,7 @@ class TSR(BaseModule):
         ckpt = torch.load(weight_path, map_location="cpu")
         model.load_state_dict(ckpt)
         return model
+    
     def configure(self):
         self.image_tokenizer = find_class(self.cfg.image_tokenizer_cls)(
             self.cfg.image_tokenizer
@@ -92,7 +99,7 @@ class TSR(BaseModule):
         ],
         device: str,
     ) -> torch.FloatTensor:
-        # Step 1: Image processing only, no DALLE invocation here
+        # 기존 이미지 입력을 통한 처리
         rgb_cond = self.image_processor(image, self.cfg.cond_image_size)[:, None].to(
             device
         )
@@ -185,6 +192,39 @@ class TSR(BaseModule):
         image_response = requests.get(image_url)
         # Open the image using PIL and return it
         return Image.open(BytesIO(image_response.content))
+
+    def generate_image_from_text(self, text: str) -> Image.Image:
+        lines = [
+            "Create a simple and clear image based on the following description:",
+            text,
+            "Use a plain white background.",
+            "The object should be centered and take up most of the image space.",
+            "Apply a 3D rendering style.",
+            "Ensure the image is appropriate and safe for all audiences."
+        ]
+        prompt = "\n".join(lines)
+
+        # Call the API to generate the image
+        response = openai.images.generate(
+            model="dall-e-3",
+            prompt=prompt,
+            size="1024x1024",  # Size of the generated image
+            quality="standard",
+            n=1  # Number of images to generate
+        )
+        
+        # Extract the URL of the generated image
+        image_url = response.data[0].url
+        print(f"Generated Image URL: {image_url}")
+        image_response = requests.get(image_url)
+
+        # Open the image using PIL and return it
+        image = Image.open(BytesIO(image_response.content))
+
+        # Step to remove the background after generating the image
+        image = remove_background(image, rembg_session)
+
+        return image
     
     def render(
         self,

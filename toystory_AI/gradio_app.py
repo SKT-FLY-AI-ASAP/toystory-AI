@@ -33,11 +33,9 @@ model.to(device)
 
 rembg_session = rembg.new_session()
 
-
 def check_input_image(input_image):
     if input_image is None:
         raise gr.Error("No image uploaded!")
-
 
 def dalle_preprocess(input_image):
     # Step 1: 이미지를 base64로 인코딩
@@ -50,7 +48,6 @@ def dalle_preprocess(input_image):
     processed_image = model.generate_image_with_dalle(image_content)
 
     return processed_image
-
 
 def preprocess(input_image, do_remove_background, foreground_ratio):
     # Ensure the input image is a PIL Image object
@@ -74,14 +71,13 @@ def preprocess(input_image, do_remove_background, foreground_ratio):
             image = fill_background(image)
     return image
 
-
-def generate(image, mc_resolution, formats=["obj", "glb", "stl"]):  # Add "stl" as a format
+def generate(image, mc_resolution, formats=["obj", "glb", "stl"]):
     scene_codes = model(image, device=device)
     mesh = model.extract_mesh(scene_codes, True, resolution=mc_resolution)[0]
     mesh = to_gradio_3d_orientation(mesh)
     
     rv = []
-    temp_files = []  # Store the temporary files for cleanup
+    temp_files = []
     for format in formats:
         mesh_path = tempfile.NamedTemporaryFile(suffix=f".{format}", delete=False)
         temp_files.append(mesh_path.name)
@@ -89,25 +85,43 @@ def generate(image, mc_resolution, formats=["obj", "glb", "stl"]):  # Add "stl" 
             mesh.export(mesh_path.name)
         elif format == "stl":
             if "obj" in formats:
-                # If OBJ was generated, convert it to STL
                 scene = a3d.Scene.from_file(temp_files[formats.index("obj")])
             elif "glb" in formats:
-                # If GLB was generated, convert it to STL
                 scene = a3d.Scene.from_file(temp_files[formats.index("glb")])
             scene.save(mesh_path.name)
         rv.append(mesh_path.name)
     
     return rv
 
+def generate_from_text(text, mc_resolution, formats=["obj", "glb", "stl"]):
+    # Step 1: Text to Image using DALL-E
+    generated_image = model.generate_image_from_text(text)
+
+    # Step 2: Process the generated image (you can add background removal, etc., if needed)
+    processed_image = preprocess(generated_image, False, 0.9)
+
+    # Step 3: Generate 3D model from the processed image
+    mesh_names = generate(processed_image, mc_resolution, formats)
+
+    return processed_image, mesh_names[0], mesh_names[1], mesh_names[2]
+
 def run_example(image_pil):
     preprocessed = dalle_preprocess(image_pil)
     processed_image = preprocess(preprocessed, False, 0.9)
-    mesh_names = generate(processed_image, 256, ["obj", "glb", "stl"])  # Include STL format
+    mesh_names = generate(processed_image, 256, ["obj", "glb", "stl"])
     return processed_image, mesh_names[0], mesh_names[1], mesh_names[2]
-
 
 with gr.Blocks(title="TripoSR") as interface:
     gr.Markdown(
+        """
+    # TripoSR Demo
+    [TripoSR](https://github.com/VAST-AI-Research/TripoSR) is a state-of-the-art open-source model for **fast** feedforward 3D reconstruction from a single image, collaboratively developed by [Tripo AI](https://www.tripo3d.ai/) and [Stability AI](https://stability.ai/).
+    
+    **Tips:**
+    1. If you find the result is unsatisfactory, please try changing the foreground ratio. It might improve the results.
+    2. It's better to disable "Remove Background" for the provided examples (except for the last one) since they have been already preprocessed.
+    3. Otherwise, please disable "Remove Background" option only if your input image is RGBA with a transparent background, image contents are centered and occupy more than 70% of the image width or height.
+    """
     )
     with gr.Row(variant="panel"):
         with gr.Column():
@@ -122,6 +136,7 @@ with gr.Blocks(title="TripoSR") as interface:
                 processed_image = gr.Image(label="Processed Image", interactive=False)
             with gr.Row():
                 with gr.Group():
+                    input_text = gr.Textbox(label="Input Text", placeholder="Describe the object you want to generate in 3D")
                     do_remove_background = gr.Checkbox(
                         label="Remove Background", value=True
                     )
@@ -140,7 +155,8 @@ with gr.Blocks(title="TripoSR") as interface:
                         step=32
                     )
             with gr.Row():
-                submit = gr.Button("Generate", elem_id="generate", variant="primary")
+                submit_image = gr.Button("Generate from Image", elem_id="generate_image", variant="primary")
+                submit_text = gr.Button("Generate from Text", elem_id="generate_text", variant="primary")
         with gr.Column():
             with gr.Tab("OBJ"):
                 output_model_obj = gr.Model3D(
@@ -154,7 +170,7 @@ with gr.Blocks(title="TripoSR") as interface:
                     interactive=False,
                 )
                 gr.Markdown("Note: The model shown here has a darker appearance. Download to get correct results.")
-            with gr.Tab("STL"):  # Add STL tab
+            with gr.Tab("STL"):
                 output_model_stl = gr.Model3D(
                     label="Output Model (STL Format)",
                     interactive=False,
@@ -176,17 +192,18 @@ with gr.Blocks(title="TripoSR") as interface:
                 "examples/image_4.png",
             ],
             inputs=[input_image],
-            outputs=[processed_image, output_model_obj, output_model_glb, output_model_stl],  # Include STL output
+            outputs=[processed_image, output_model_obj, output_model_glb, output_model_stl],
             cache_examples=False,
             fn=partial(run_example),
             label="Examples",
             examples_per_page=20,
         )
-    submit.click(fn=check_input_image, inputs=[input_image])\
+    submit_image.click(fn=check_input_image, inputs=[input_image])\
         .success(fn=dalle_preprocess, inputs=[input_image], outputs=[processed_image])\
         .success(fn=preprocess, inputs=[processed_image, do_remove_background, foreground_ratio], outputs=[processed_image])\
-        .success(fn=generate, inputs=[processed_image, mc_resolution], outputs=[output_model_obj, output_model_glb, output_model_stl])  # Include STL output
+        .success(fn=generate, inputs=[processed_image, mc_resolution], outputs=[output_model_obj, output_model_glb, output_model_stl])
 
+    submit_text.click(fn=generate_from_text, inputs=[input_text, mc_resolution], outputs=[processed_image, output_model_obj, output_model_glb, output_model_stl])
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
