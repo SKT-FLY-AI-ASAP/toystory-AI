@@ -1,20 +1,25 @@
-import logging
 import os
 import tempfile
-import time
+import argparse
+import logging
 
 import gradio as gr
 import numpy as np
 import rembg
 import torch
+import boto3
 from PIL import Image
-from functools import partial
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError
+import requests
+from io import BytesIO
 
+import aspose.threed as a3d  # Import Aspose.3D
 from tsr.system import TSR
 from tsr.utils import remove_background, resize_foreground, to_gradio_3d_orientation
 
-import argparse
-import aspose.threed as a3d  # Import Aspose.3D
+from dotenv import load_dotenv
+
+load_dotenv()
 
 if torch.cuda.is_available():
     device = "cuda:0"
@@ -33,26 +38,40 @@ model.to(device)
 
 rembg_session = rembg.new_session()
 
-def check_input_image(input_image):
-    if input_image is None:
-        raise gr.Error("No image uploaded!")
+# OPENAI
+OPENAI_API_KEY=os.getenv("OPENAI_API_KEY")
 
-def dalle_preprocess(input_image):
-    # Step 1: 이미지를 base64로 인코딩
-    base64_image = model.encode_image(input_image)
+# AWS S3
+S3_ACCESS_KEY=os.getenv("S3_ACCESS_KEY")
+S3_PRIVATE_KEY=os.getenv("S3_PRIVATE_KEY")
+S3_BUCKET_NAME=os.getenv("S3_BUCKET_NAME")
 
-    # Step 2: GPT-4를 통해 이미지 내용 설명 얻기
-    image_content = model.get_image_content_from_gpt4(base64_image)
-
-    # Step 3: DALLE-3을 사용해 이미지 생성
-    processed_image = model.generate_image_with_dalle(image_content)
-
-    return processed_image
-
-def preprocess(input_image, do_remove_background, foreground_ratio):
-    # Ensure the input image is a PIL Image object
-    if isinstance(input_image, np.ndarray):
-        input_image = Image.fromarray(input_image)
+def process_and_generate(input_image=None, input_text=None, input_s3_url=None, mc_resolution=256, do_remove_background=True, foreground_ratio=0.9, formats=["obj", "glb", "stl"],
+                         title=None):
+    # Step 1: Fetch and preprocess the input
+    if input_s3_url:
+        # Download the image from S3
+        response = requests.get(input_s3_url)
+        if response.status_code == 200:
+            input_image = Image.open(BytesIO(response.content))
+        else:
+            raise ValueError("Failed to download image from S3 URL.")
+    
+    if input_image:
+        # DALL-E preprocessing for an input image
+        base64_image = model.encode_image(input_image)
+        image_content = model.get_image_content_from_gpt4(base64_image)
+        processed_image = model.generate_image_with_dalle(image_content)
+    elif input_text:
+        # DALL-E processing for an input text
+        generated_image = model.generate_image_from_text(input_text)
+        processed_image = generated_image
+    else:
+        raise ValueError("Either input_image, input_text, or input_s3_url must be provided")
+    
+    # Step 2: Further processing (background removal, resizing)
+    if isinstance(processed_image, np.ndarray):
+        processed_image = Image.fromarray(processed_image)
     
     def fill_background(image):
         image = np.array(image).astype(np.float32) / 255.0
@@ -61,71 +80,97 @@ def preprocess(input_image, do_remove_background, foreground_ratio):
         return image
 
     if do_remove_background:
-        image = input_image.convert("RGB")
-        image = remove_background(image, rembg_session)
-        image = resize_foreground(image, foreground_ratio)
-        image = fill_background(image)
+        processed_image = processed_image.convert("RGB")
+        processed_image = remove_background(processed_image, rembg_session)
+        processed_image = resize_foreground(processed_image, foreground_ratio)
+        processed_image = fill_background(processed_image)
     else:
-        image = input_image
-        if image.mode == "RGBA":
-            image = fill_background(image)
-    return image
-
-def generate(image, mc_resolution, formats=["obj", "glb", "stl"]):
-    scene_codes = model(image, device=device)
+        if processed_image.mode == "RGBA":
+            processed_image = fill_background(processed_image)
+    
+    # Step 3: Generate 3D model and upload to S3
+    scene_codes = model(processed_image, device=device)
     mesh = model.extract_mesh(scene_codes, True, resolution=mc_resolution)[0]
     mesh = to_gradio_3d_orientation(mesh)
     
-    rv = []
-    temp_files = []
+    s3_urls = []
+    obj_file_path = None
+
     for format in formats:
         mesh_path = tempfile.NamedTemporaryFile(suffix=f".{format}", delete=False)
-        temp_files.append(mesh_path.name)
-        if format in ["obj", "glb"]:
+        print(f"Creating file: {mesh_path.name}")
+
+        flag = True
+        
+        if format == "obj":
             mesh.export(mesh_path.name)
+            obj_file_path = mesh_path.name  # Save OBJ file path
+            continue
+        elif format == "glb":
+            mesh.export(mesh_path.name)
+            loc = "0-glb"
         elif format == "stl":
-            if "obj" in formats:
-                scene = a3d.Scene.from_file(temp_files[formats.index("obj")])
-            elif "glb" in formats:
-                scene = a3d.Scene.from_file(temp_files[formats.index("glb")])
+            if obj_file_path is None:
+                raise RuntimeError("OBJ file does not exist. OBJ file is required to create STL.")
+            print(f"Using OBJ file: {obj_file_path} to create STL")
+            scene = a3d.Scene.from_file(obj_file_path)
             scene.save(mesh_path.name)
-        rv.append(mesh_path.name)
+            loc = "1-stl"
+        
+        # Upload to S3 and collect URLs
+        s3_cli = boto3.client(
+            's3',
+            aws_access_key_id=S3_ACCESS_KEY,
+            aws_secret_access_key=S3_PRIVATE_KEY,
+            region_name='ap-northeast-2'
+        )
+
+        try:
+            with open(mesh_path.name, 'rb') as file:
+                s3_cli.upload_fileobj(
+                    file,
+                    S3_BUCKET_NAME,
+                    f"3d-contents/{loc}/{title}-{os.path.basename(mesh_path.name)}",
+                    ExtraArgs={'ContentType': "application/octet-stream"}
+                )
+            url = f"https://{S3_BUCKET_NAME}.s3.ap-northeast-2.amazonaws.com/3d-contents/{loc}/{title}-{os.path.basename(mesh_path.name)}"
+            print(f"File uploaded to S3: {url}")
+            s3_urls.append(url)
+        except NoCredentialsError:
+            raise Exception("AWS credentials not found.")
+        except PartialCredentialsError:
+            raise Exception("Incomplete AWS credentials provided.")
+        except Exception as e:
+            raise Exception(f"Failed to upload file: {str(e)}")
     
-    return rv
+    # Return the processed image and individual URLs for the 3D models
+    return processed_image, s3_urls[0], s3_urls[1]
 
-def generate_from_text(text, mc_resolution, formats=["obj", "glb", "stl"]):
-    # Step 1: Text to Image using DALL-E
-    generated_image = model.generate_image_from_text(text)
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--username', type=str, default=None, help='Username for authentication')
+    parser.add_argument('--password', type=str, default=None, help='Password for authentication')
+    parser.add_argument('--port', type=int, default=7860, help='Port to run the server listener on')
+    parser.add_argument("--listen", action='store_true', help="launch gradio with 0.0.0.0 as server name, allowing to respond to network requests")
+    parser.add_argument("--share", action='store_true', help="use share=True for gradio and make the UI accessible through their site")
+    parser.add_argument("--queuesize", type=int, default=1, help="launch gradio queue max_size")
+    args = parser.parse_args()
 
-    # Step 2: Process the generated image (you can add background removal, etc., if needed)
-    processed_image = preprocess(generated_image, False, 0.9)
-
-    # Step 3: Generate 3D model from the processed image
-    mesh_names = generate(processed_image, mc_resolution, formats)
-
-    return processed_image, mesh_names[0], mesh_names[1], mesh_names[2]
-
-def run_example(image_pil):
-    preprocessed = dalle_preprocess(image_pil)
-    processed_image = preprocess(preprocessed, False, 0.9)
-    mesh_names = generate(processed_image, 256, ["obj", "glb", "stl"])
-    return processed_image, mesh_names[0], mesh_names[1], mesh_names[2]
-
-with gr.Blocks(title="TripoSR") as interface:
-    gr.Markdown(
+    with gr.Blocks(title="TripoSR") as interface:
+        gr.Markdown(
+            """
+        # TripoSR Demo
+        [TripoSR](https://github.com/VAST-AI-Research/TripoSR) is a state-of-the-art open-source model for **fast** feedforward 3D reconstruction from a single image, collaboratively developed by [Tripo AI](https://www.tripo3d.ai/) and [Stability AI](https://stability.ai/).
+        
+        **Tips:**
+        1. If you find the result is unsatisfactory, please try changing the foreground ratio. It might improve the results.
+        2. It's better to disable "Remove Background" for the provided examples (except for the last one) since they have been already preprocessed.
+        3. Otherwise, please disable "Remove Background" option only if your input image is RGBA with a transparent background, image contents are centered and occupy more than 70% of the image width or height.
         """
-    # TripoSR Demo
-    [TripoSR](https://github.com/VAST-AI-Research/TripoSR) is a state-of-the-art open-source model for **fast** feedforward 3D reconstruction from a single image, collaboratively developed by [Tripo AI](https://www.tripo3d.ai/) and [Stability AI](https://stability.ai/).
-    
-    **Tips:**
-    1. If you find the result is unsatisfactory, please try changing the foreground ratio. It might improve the results.
-    2. It's better to disable "Remove Background" for the provided examples (except for the last one) since they have been already preprocessed.
-    3. Otherwise, please disable "Remove Background" option only if your input image is RGBA with a transparent background, image contents are centered and occupy more than 70% of the image width or height.
-    """
-    )
-    with gr.Row(variant="panel"):
-        with gr.Column():
-            with gr.Row():
+        )
+        # Input section
+        with gr.Row(variant="panel"):
+            with gr.Column():
                 input_image = gr.Image(
                     label="Input Image",
                     image_mode="RGBA",
@@ -133,50 +178,29 @@ with gr.Blocks(title="TripoSR") as interface:
                     type="pil",
                     elem_id="content_image",
                 )
+                input_text = gr.Textbox(label="Input Text", placeholder="Describe the object you want to generate in 3D")
+                input_s3_url = gr.Textbox(label="Input S3 URL", placeholder="Enter S3 URL of the image")
+                do_remove_background = gr.Checkbox(label="Remove Background", value=True)
+                foreground_ratio = gr.Slider(label="Foreground Ratio", minimum=0.5, maximum=1.0, value=0.85, step=0.05)
+                mc_resolution = gr.Slider(label="Marching Cubes Resolution", minimum=32, maximum=320, value=256, step=32)
+                submit_button = gr.Button("Generate 3D Model", elem_id="generate", variant="primary")
+            # Output section
+            with gr.Column():
                 processed_image = gr.Image(label="Processed Image", interactive=False)
-            with gr.Row():
-                with gr.Group():
-                    input_text = gr.Textbox(label="Input Text", placeholder="Describe the object you want to generate in 3D")
-                    do_remove_background = gr.Checkbox(
-                        label="Remove Background", value=True
-                    )
-                    foreground_ratio = gr.Slider(
-                        label="Foreground Ratio",
-                        minimum=0.5,
-                        maximum=1.0,
-                        value=0.85,
-                        step=0.05,
-                    )
-                    mc_resolution = gr.Slider(
-                        label="Marching Cubes Resolution",
-                        minimum=32,
-                        maximum=320,
-                        value=256,
-                        step=32
-                    )
-            with gr.Row():
-                submit_image = gr.Button("Generate from Image", elem_id="generate_image", variant="primary")
-                submit_text = gr.Button("Generate from Text", elem_id="generate_text", variant="primary")
-        with gr.Column():
-            with gr.Tab("OBJ"):
-                output_model_obj = gr.Model3D(
-                    label="Output Model (OBJ Format)",
-                    interactive=False,
-                )
-                gr.Markdown("Note: The model shown here is flipped. Download to get correct results.")
-            with gr.Tab("GLB"):
-                output_model_glb = gr.Model3D(
-                    label="Output Model (GLB Format)",
-                    interactive=False,
-                )
-                gr.Markdown("Note: The model shown here has a darker appearance. Download to get correct results.")
-            with gr.Tab("STL"):
-                output_model_stl = gr.Model3D(
-                    label="Output Model (STL Format)",
-                    interactive=False,
-                )
-                gr.Markdown("Note: The model shown here may appear different. Download to get correct results.")
-    with gr.Row(variant="panel"):
+                with gr.Tab("OBJ"):
+                    output_model_obj = gr.Model3D(label="Output Model (OBJ Format)", interactive=False)
+                with gr.Tab("GLB"):
+                    output_model_glb = gr.Model3D(label="Output Model (GLB Format)", interactive=False)
+                with gr.Tab("STL"):
+                    output_model_stl = gr.Model3D(label="Output Model (STL Format)", interactive=False)
+
+        submit_button.click(
+            fn=process_and_generate,
+            inputs=[input_image, input_text, input_s3_url, mc_resolution, do_remove_background, foreground_ratio],
+            outputs=[processed_image, output_model_glb, output_model_stl]
+        )
+
+        # Examples section
         gr.Examples(
             examples=[
                 "examples/toy_bingbong.png",
@@ -192,30 +216,15 @@ with gr.Blocks(title="TripoSR") as interface:
             inputs=[input_image],
             outputs=[processed_image, output_model_obj, output_model_glb, output_model_stl],
             cache_examples=False,
-            fn=partial(run_example),
+            fn=process_and_generate,
             label="Examples",
             examples_per_page=20,
         )
-    submit_image.click(fn=check_input_image, inputs=[input_image])\
-        .success(fn=dalle_preprocess, inputs=[input_image], outputs=[processed_image])\
-        .success(fn=preprocess, inputs=[processed_image, do_remove_background, foreground_ratio], outputs=[processed_image])\
-        .success(fn=generate, inputs=[processed_image, mc_resolution], outputs=[output_model_obj, output_model_glb, output_model_stl])
 
-    submit_text.click(fn=generate_from_text, inputs=[input_text, mc_resolution], outputs=[processed_image, output_model_obj, output_model_glb, output_model_stl])
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--username', type=str, default=None, help='Username for authentication')
-    parser.add_argument('--password', type=str, default=None, help='Password for authentication')
-    parser.add_argument('--port', type=int, default=7860, help='Port to run the server listener on')
-    parser.add_argument("--listen", action='store_true', help="launch gradio with 0.0.0.0 as server name, allowing to respond to network requests")
-    parser.add_argument("--share", action='store_true', help="use share=True for gradio and make the UI accessible through their site")
-    parser.add_argument("--queuesize", type=int, default=1, help="launch gradio queue max_size")
-    args = parser.parse_args()
     interface.queue(max_size=args.queuesize)
     interface.launch(
         auth=(args.username, args.password) if (args.username and args.password) else None,
         share=args.share,
-        server_name="0.0.0.0" if args.listen else None, 
+        server_name="0.0.0.0" if args.listen else None,
         server_port=args.port
     )

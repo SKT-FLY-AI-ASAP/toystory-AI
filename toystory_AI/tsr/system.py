@@ -26,10 +26,13 @@ import base64
 from io import BytesIO
 import rembg  # rembg 임포트
 
-# 발급받은 API 키 설정
-OPENAI_API_KEY = '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'
-# openai API 키 인증
-openai.api_key = OPENAI_API_KEY
+from dotenv import load_dotenv
+
+load_dotenv()
+
+openai.api_key = os.getenv("OPENAI_API_KEY")
+if openai.api_key is None:
+    raise ValueError("API key is not set")
 
 # Initialize rembg session
 rembg_session = rembg.new_session()
@@ -174,7 +177,7 @@ class TSR(BaseModule):
             "Modify the image using DALLE-2 following the instructions:",
             "1. The content of the image: " + image_content,
             "2. Change the background to complete white.",
-            "3. The object should be only one in the image.",
+            "3. Ensure that there is only one object present in the image.",
             "4. Add a 3D style to the picture."
         ]
         prompt = "\n".join(lines)
