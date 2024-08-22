@@ -27,7 +27,7 @@ from io import BytesIO
 import rembg  # rembg 임포트
 
 # 발급받은 API 키 설정
-OPENAI_API_KEY = '본인 API 키'
+OPENAI_API_KEY = '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'
 # openai API 키 인증
 openai.api_key = OPENAI_API_KEY
 
@@ -200,8 +200,10 @@ class TSR(BaseModule):
             "Use a plain white background.",
             "The object should be centered and take up most of the image space.",
             "Apply a 3D rendering style.",
+            "Render the object at a 15-degree angle to show a side view.",
             "Ensure the image is appropriate and safe for all audiences."
         ]
+
         prompt = "\n".join(lines)
 
         # Call the API to generate the image
