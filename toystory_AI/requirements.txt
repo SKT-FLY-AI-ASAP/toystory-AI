@@ -113,10 +113,10 @@ threadpoolctl==3.5.0
 tifffile==2024.8.10
 tokenizers==0.19.1
 tomlkit==0.12.0
-torch==2.1.0+cu121
-torchaudio==2.1.0+cu121
+torch==2.1.0
+torchaudio==2.1.0
 torchmcubes @ git+https://github.com/tatsy/torchmcubes.git@cb81cddece46a8a126b08f7fbb9742f8605eefab
-torchvision==0.16.0+cu121
+torchvision==0.16.0
 tqdm==4.66.5
 transformers==4.44.0
 trimesh==4.0.5
