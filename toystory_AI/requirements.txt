@@ -10,8 +10,8 @@ anyio==4.4.0
 aspose-3d==24.7.0
 async-timeout==4.0.3
 attrs==24.2.0
-boto3==1.35.3
-botocore==1.35.3
+boto3  # Removed specific version constraint
+botocore  # Removed specific version constraint
 certifi==2022.12.7
 charset-normalizer==2.1.1
 click==8.1.7
@@ -32,8 +32,8 @@ frozenlist==1.4.1
 fsspec==2023.10.0
 glcontext==2.5.0
 GPUtil==1.4.0
-gradio==4.41.0
-gradio_client==1.3.0
+gradio  # Removed specific version constraint
+gradio_client  # Removed specific version constraint
 h11==0.14.0
 httpcore==1.0.5
 httpx==0.27.0
@@ -88,6 +88,7 @@ Pygments==2.18.0
 PyMatting==1.1.12
 pyparsing==3.1.2
 python-dateutil==2.9.0.post0
+python-dotenv==1.0.0
 python-multipart==0.0.9
 pytz==2024.1
 PyYAML==6.0.2
@@ -124,7 +125,7 @@ triton==2.1.0
 typer==0.12.4
 typing_extensions==4.12.2
 tzdata==2024.1
-urllib3==1.26.19
+# Removed urllib3 to allow pip to choose a compatible version
 uvicorn==0.30.6
 websockets==11.0.3
 xatlas==0.0.9
