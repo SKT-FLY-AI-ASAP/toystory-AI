@@ -1,0 +1,1 @@
+/tmp/tmpszxuzhq7/wheel/platlib/./torchmcubes_module.cpython-39-x86_64-linux-gnu.so

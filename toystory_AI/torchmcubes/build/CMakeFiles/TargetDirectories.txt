@@ -1,0 +1,13 @@
+/home/asap/Downloads/toystory_AI/torchmcubes/build/CMakeFiles/edit_cache.dir
+/home/asap/Downloads/toystory_AI/torchmcubes/build/CMakeFiles/rebuild_cache.dir
+/home/asap/Downloads/toystory_AI/torchmcubes/build/CMakeFiles/list_install_components.dir
+/home/asap/Downloads/toystory_AI/torchmcubes/build/CMakeFiles/install.dir
+/home/asap/Downloads/toystory_AI/torchmcubes/build/CMakeFiles/install/local.dir
+/home/asap/Downloads/toystory_AI/torchmcubes/build/CMakeFiles/install/strip.dir
+/home/asap/Downloads/toystory_AI/torchmcubes/build/cxx/CMakeFiles/torchmcubes_module.dir
+/home/asap/Downloads/toystory_AI/torchmcubes/build/cxx/CMakeFiles/edit_cache.dir
+/home/asap/Downloads/toystory_AI/torchmcubes/build/cxx/CMakeFiles/rebuild_cache.dir
+/home/asap/Downloads/toystory_AI/torchmcubes/build/cxx/CMakeFiles/list_install_components.dir
+/home/asap/Downloads/toystory_AI/torchmcubes/build/cxx/CMakeFiles/install.dir
+/home/asap/Downloads/toystory_AI/torchmcubes/build/cxx/CMakeFiles/install/local.dir
+/home/asap/Downloads/toystory_AI/torchmcubes/build/cxx/CMakeFiles/install/strip.dir
