@@ -179,8 +179,6 @@ with gr.Blocks(title="TripoSR") as interface:
     with gr.Row(variant="panel"):
         gr.Examples(
             examples=[
-                "examples/poly_fox.png",
-                "examples/robot.png",
                 "examples/toy_bingbong.png",
                 "examples/toy_lion.jpg",
                 "examples/toy_sword.png",
