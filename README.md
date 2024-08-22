@@ -40,7 +40,7 @@ ls /home/asap/anaconda3/envs/test3/lib/libnvToolsExt.so
 ```
 export CMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH:/usr/local/cuda/lib64
 ```
-##### 또는 현재 화녕에 맞게 CUDA 경로를 지정하기
+##### 또는 현재 환경에 맞게 CUDA 경로를 지정하기
 ```
 export CMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH:/home/asap/anaconda3/envs/test3/lib
 ```
