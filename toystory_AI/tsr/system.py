@@ -27,7 +27,7 @@ from io import BytesIO
 import rembg  # rembg 임포트
 
 # 발급받은 API 키 설정
-OPENAI_API_KEY = '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'
+OPENAI_API_KEY = '본인 API 키'
 # openai API 키 인증
 openai.api_key = OPENAI_API_KEY
 
