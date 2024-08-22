@@ -121,7 +121,7 @@ torchvision==0.16.0
 tqdm==4.66.5
 transformers==4.44.0
 trimesh==4.0.5
-triton==2.1.0
+#triton==2.1.0
 typer==0.12.4
 typing_extensions==4.12.2
 tzdata==2024.1
