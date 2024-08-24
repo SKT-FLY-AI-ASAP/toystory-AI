@@ -8,7 +8,7 @@
 ### Installation
 - Recommend : python >= 3.9.19, linux 20.04, CUDA >= 12.1(Install CUDA if avilable)
 ```
-conda create --name toystory python = 3.9.19
+conda create --name toystory python==3.9.19
 conda activate toystory
 
 # Install the correct version of CUDA
