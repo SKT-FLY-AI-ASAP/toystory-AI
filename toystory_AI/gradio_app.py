@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 if torch.cuda.is_available():
-    device = "cpu"  # "cuda:0"
+    device = "cuda:0"
 else:
     device = "cpu"
 
