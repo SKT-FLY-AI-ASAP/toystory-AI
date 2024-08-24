@@ -178,7 +178,10 @@ class TSR(BaseModule):
             "1. The content of the image: " + image_content,
             "2. Change the background to complete white.",
             "3. Ensure that there is only one object present in the image.",
-            "4. Add a 3D style to the picture."
+            "4. Add a 3D style to the picture.",
+            # 색상 적용 부분 추가
+            "5. For the object, always apply the color that best matches it.",
+            "6. If a color is already specified, keep the object in that color."
         ]
         prompt = "\n".join(lines)
         # Call the API to generate the image
@@ -230,6 +233,32 @@ class TSR(BaseModule):
         image = remove_background(image, rembg_session)
 
         return image
+    
+    def generate_image_with_background(self, image_content, text:str) -> Image.Image:
+        lines = [
+            "Create a warm and cozy background that complements the existing content.",
+            "The background should evoke a sense of childhood wonder and innocence, filled with soft colors, gentle gradients, and elements that feel playful and comforting. ",
+            "Think of scenes like fluffy clouds, pastel-colored landscapes, or a whimsical garden with friendly animals. ",
+            "The design should inspire a feeling of warmth, safety, and joy, making it perfect for young children."
+        ]
+
+        prompt = "\n".join(lines)
+
+        # Call the API to generate the image
+        response = openai.images.generate(
+            model="dall-e-3",
+            prompt=prompt,
+            size="1024x1024",  # Size of the generated image
+            quality="standard",
+            n=1  # Number of images to generate
+        )
+        
+        # Extract the URL of the generated image
+        image_url = response.data[0].url
+        print(f"Generated Image URL: {image_url}")
+        image_response = requests.get(image_url)
+
+        return Image.open(BytesIO(image_response.content))
     
     def render(
         self,
