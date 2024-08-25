@@ -48,6 +48,8 @@ ENV CMAKE_PREFIX_PATH="$(python3 -c 'import torch; print(torch.utils.cmake_prefi
 
 RUN git clone https://github.com/tatsy/torchmcubes.git && \
     cd torchmcubes && \
+    cmake -DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH} . && \
+    cmake --build . && \
     pip install .
 
 # 6. 작업 디렉토리 설정
