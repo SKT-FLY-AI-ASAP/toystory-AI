@@ -1,8 +1,8 @@
+import argparse
 import os
 import tempfile
-import argparse
-import logging
 import subprocess
+import random
 
 import gradio as gr
 import numpy as np
@@ -37,9 +37,11 @@ model.to(device)
 
 rembg_session = rembg.new_session()
 
-
 def process_and_generate(input_image=None, input_text=None, input_s3_url=None, mc_resolution=256, do_remove_background=True, foreground_ratio=0.9, formats=["obj", "stl", "glb"],
                          title=None):
+    if not title:
+        title = "output"  # Default title if none is provided
+
     # Step 1: Fetch and preprocess the input
     image_content = None
 
@@ -80,7 +82,10 @@ def process_and_generate(input_image=None, input_text=None, input_s3_url=None, m
             processed_image = fill_background(processed_image)
 
     # Save the processed image locally
-    processed_image_path = os.path.join(tempfile.gettempdir(), f"{title}_processed.png")
+    output_dir = "output_files"
+    os.makedirs(output_dir, exist_ok=True)
+
+    processed_image_path = os.path.join(output_dir, f"{title}_processed.png")
     processed_image.save(processed_image_path)
 
     # Generate 3D model and save locally
@@ -88,103 +93,108 @@ def process_and_generate(input_image=None, input_text=None, input_s3_url=None, m
     mesh = model.extract_mesh(scene_codes, True, resolution=mc_resolution)[0]
     mesh = to_gradio_3d_orientation(mesh)
 
-    file_paths = []
-    obj_file_path = None
+    glb_file_path = os.path.join(output_dir, f"{title}.glb")
+    mesh.export(glb_file_path)
 
-    for format in formats:
-        mesh_path = os.path.join(tempfile.gettempdir(), f"{title}.{format}")
-        print(f"Creating file: {mesh_path}")
+    # Generate STL file
+    stl_file_path = os.path.join(output_dir, f"{title}.stl")
+    scene = a3d.Scene.from_file(glb_file_path)
+    scene.save(stl_file_path)
 
-        # Set the appropriate location path for each format
-        if format == "obj":
-            mesh.export(mesh_path)
-            obj_file_path = mesh_path  # Save OBJ file path
-        elif format == "stl":
-            if obj_file_path is None:
-                raise RuntimeError("OBJ file does not exist. OBJ file is required to create STL.")
-            print(f"Using OBJ file: {obj_file_path} to create STL")
-            scene = a3d.Scene.from_file(obj_file_path)
-            scene.save(mesh_path)
-        elif format == "glb":
-            mesh.export(mesh_path)
-        else:
-            raise ValueError(f"Unsupported format: {format}")
-
-        file_paths.append(mesh_path)
-
-    # Generate a backgrounded image GLB
+    # Generate background image and save locally
     backgrounded_image = model.generate_image_with_background(image_content, input_text or "Generated Image")
+    backgrounded_image_path = os.path.join(output_dir, f"{title}_backgrounded.png")
+    backgrounded_image.save(backgrounded_image_path)
 
-    backgrounded_scene_codes = model(backgrounded_image, device=device)
-    backgrounded_mesh = model.extract_mesh(backgrounded_scene_codes, True, resolution=mc_resolution)[0]
-    backgrounded_mesh = to_gradio_3d_orientation(backgrounded_mesh)
+    # Modify the blender script with the correct file paths and animate the model
+    animated_glb_path = os.path.join(output_dir, f"{title}_animated.glb")
 
-    backgrounded_mesh_path = os.path.join(tempfile.gettempdir(), f"{title}_backgrounded.glb")
-    print(f"Creating file with background: {backgrounded_mesh_path}")
-    backgrounded_mesh.export(backgrounded_mesh_path)
-
-    # Download the generated GLB files
-    glb_1_path = file_paths[-1]  # Assuming GLB is the last format generated
-    glb_2_path = backgrounded_mesh_path
-
-    # Modify the blender script with the correct file paths
     blender_script = f"""
 import bpy
+import random
 
 # Blender 초기화 - 기존 씬 초기화
 bpy.ops.wm.read_factory_settings(use_empty=True)
 
-# 첫 번째 GLB 파일 불러오기
-bpy.ops.import_scene.gltf(filepath="{glb_1_path}")
+# GLB 파일 불러오기
+bpy.ops.import_scene.gltf(filepath="{glb_file_path}")
 
-# 첫 번째 GLB 파일의 오브젝트들을 축소하고 Y축 방향으로 이동
+# GLB 파일의 오브젝트들을 축소하고 Y축 방향으로 이동
 for obj in bpy.context.selected_objects:
     obj.scale = (0.3, 0.3, 0.3)  # 오브젝트 크기를 30%로 축소
     obj.location.y += 0.3  # 원하는 만큼 Y축 방향으로 이동
     obj.location.z -= 0.2
 
-# 두 번째 GLB 파일 불러오기
-bpy.ops.import_scene.gltf(filepath="{glb_2_path}")
+# 애니메이션 추가 - X축 및 Y축 회전 (랜덤한 위치로 이동)
+frame_start = 1
+frame_mid1 = 48   # 2초 후 (24 fps)
+frame_mid2 = 84   # 3.5초 후 (1.5초 추가)
+frame_mid3 = 120  # 5초 후 (1.5초 추가)
+frame_mid4 = 168  # 7초 후 (2초 추가)
+frame_mid5 = 204  # 8.5초 후 (1.5초 추가)
+frame_end = 240   # 10초 후 (1.5초 추가)
 
-# 모든 오브젝트를 선택
-bpy.ops.object.select_all(action='SELECT')
+# X축 위치 설정 (처음 2초 동안 -0.2로 이동, 이후 2초 동안 0.2로 이동)
+x_start = random.uniform(-0.2, 0.2)
+x_mid1 = -0.2
+x_mid4 = 0.2
 
-# 객체 모드로 전환
-bpy.ops.object.mode_set(mode='OBJECT')
-
-# 모든 선택된 오브젝트를 메쉬로 변환
-bpy.ops.object.convert(target='MESH')
-
-# 활성 오브젝트 설정 및 결합
-if bpy.context.selected_objects:
-    bpy.context.view_layer.objects.active = bpy.context.selected_objects[0]
+for obj in bpy.context.selected_objects:
+    obj.location.x = x_start  # 시작 위치
+    obj.keyframe_insert(data_path="location", frame=frame_start)
     
-    # 선택된 오브젝트를 하나로 결합
-    bpy.ops.object.join()
-else:
-    print("No objects are selected. Please check the imported GLB files.")
+    obj.location.x = x_mid1  # 중간 위치 (-0.2)
+    obj.keyframe_insert(data_path="location", frame=frame_mid1)
+    
+    obj.location.x = x_mid1  # 동일 위치 유지
+    obj.keyframe_insert(data_path="location", frame=frame_mid3)
 
-# 결합된 오브젝트를 새로운 GLB 파일로 내보내기
-combined_path = "{os.path.join(tempfile.gettempdir(), 'combined_file.glb')}"
-bpy.ops.export_scene.gltf(filepath=combined_path, export_format='GLB')
-print("Combined GLB file saved to:", combined_path)
+    obj.location.x = x_mid4  # 끝 위치 (0.2)
+    obj.keyframe_insert(data_path="location", frame=frame_mid4)
+
+    obj.location.x = x_mid4  # 동일 위치 유지
+    obj.keyframe_insert(data_path="location", frame=frame_end)
+
+    # Y축을 기준으로 -15도 회전
+    obj.rotation_euler = (0, 0, 0)
+    obj.keyframe_insert(data_path="rotation_euler", frame=frame_start)
+    obj.rotation_euler = (0, 0, -0.261799)  # -15도
+    obj.keyframe_insert(data_path="rotation_euler", frame=frame_mid2)
+
+    # Y축을 기준으로 15도 회전
+    obj.rotation_euler = (0, 0, 0.261799)  # 15도
+    obj.keyframe_insert(data_path="rotation_euler", frame=frame_mid3)
+
+    # Y축을 기준으로 원래 위치로 돌아감
+    obj.rotation_euler = (0, 0, 0)
+    obj.keyframe_insert(data_path="rotation_euler", frame=frame_mid4)
+
+    # Y축을 기준으로 다시 -15도 회전
+    obj.rotation_euler = (0, 0, -0.261799)  # -15도
+    obj.keyframe_insert(data_path="rotation_euler", frame=frame_mid5)
+
+    # Y축을 기준으로 다시 15도 회전
+    obj.rotation_euler = (0, 0, 0.261799)  # 15도
+    obj.keyframe_insert(data_path="rotation_euler", frame=frame_end)
+
+# 애니메이션을 포함하여 GLB 파일로 내보내기
+bpy.ops.export_scene.gltf(filepath="{animated_glb_path}", export_format='GLB')
+print("Animated GLB file saved to:", animated_glb_path)
     """
 
     # Save the script to a temporary file
-    blender_script_path = os.path.join(tempfile.gettempdir(), f"{title}_blender_script.py")
+    blender_script_path = os.path.join(output_dir, f"{title}_blender_script.py")
     with open(blender_script_path, 'w') as f:
         f.write(blender_script)
 
     # Execute the Blender script
     try:
         subprocess.run(["blender", "--background", "--python", blender_script_path], check=True)
-        combined_glb_path = os.path.join(tempfile.gettempdir(), 'combined_file.glb')
     except subprocess.CalledProcessError as e:
         raise Exception(f"Blender script execution failed: {str(e)}")
 
-    # Return the file paths for the processed image and models for Gradio to display
-    return processed_image_path, backgrounded_image, file_paths[1], backgrounded_mesh_path, file_paths[2], combined_glb_path
-
+    # Return the individual file paths for Gradio to handle each output separately
+    return processed_image_path, backgrounded_image_path, animated_glb_path, stl_file_path
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -230,20 +240,14 @@ if __name__ == '__main__':
             # Output section
             with gr.Column():
                 processed_image = gr.Image(label="Processed Image", interactive=False)
-                backgrounded_image = gr.Image(label="Backgrounded Image", interactive=False)
-                with gr.Tab("GLB"):
-                    output_model_glb = gr.Model3D(label="Output Model (GLB Format)", interactive=False)
-                with gr.Tab("STL"):
-                    output_model_stl = gr.Model3D(label="Output Model (STL Format)", interactive=False)
-                with gr.Tab("Background GLB"):
-                    output_model_glb_bg = gr.Model3D(label="Output Model (Background GLB)", interactive=False)
-                with gr.Tab("Combined GLB"):
-                    output_combined_glb = gr.Model3D(label="Output Combined GLB", interactive=False)
+                backgrounded_image = gr.Image(label="Backgrounded Image (PNG)", interactive=False)
+                output_animated_glb = gr.Model3D(label="Output Animated GLB", interactive=False)
+                output_stl = gr.Model3D(label="Output STL Format", interactive=False)
 
         submit_button.click(
             fn=process_and_generate,
             inputs=[input_image, input_text, input_s3_url, mc_resolution, do_remove_background, foreground_ratio],
-            outputs=[processed_image, backgrounded_image, output_model_stl, output_model_glb_bg, output_model_glb, output_combined_glb]
+            outputs=[processed_image, backgrounded_image, output_animated_glb, output_stl]
         )
 
         # Examples section
@@ -260,7 +264,7 @@ if __name__ == '__main__':
                 "examples/image_4.png",
             ],
             inputs=[input_image],
-            outputs=[processed_image, backgrounded_image, output_model_stl, output_model_glb_bg, output_model_glb, output_combined_glb],
+            outputs=[processed_image, backgrounded_image, output_animated_glb, output_stl],
             cache_examples=False,
             fn=process_and_generate,
             label="Examples",
