@@ -125,57 +125,30 @@ for obj in bpy.context.selected_objects:
     obj.location.y += 0.3  # 원하는 만큼 Y축 방향으로 이동
     obj.location.z -= 0.2
 
-# 애니메이션 추가 - X축 및 Y축 회전 (랜덤한 위치로 이동)
+# 애니메이션 설정
 frame_start = 1
-frame_mid1 = 48   # 2초 후 (24 fps)
-frame_mid2 = 84   # 3.5초 후 (1.5초 추가)
-frame_mid3 = 120  # 5초 후 (1.5초 추가)
-frame_mid4 = 168  # 7초 후 (2초 추가)
-frame_mid5 = 204  # 8.5초 후 (1.5초 추가)
-frame_end = 240   # 10초 후 (1.5초 추가)
+frames = []
 
-# X축 위치 설정 (처음 2초 동안 -0.2로 이동, 이후 2초 동안 0.2로 이동)
-x_start = random.uniform(-0.2, 0.2)
-x_mid1 = -0.2
-x_mid4 = 0.2
+# X축과 Y축 애니메이션 설정 (총 5번 반복)
+for i in range(5):
+    duration = random.randint(40, 80)  # 40~80프레임 동안 이동 및 회전 (약 1.5초~3초)
+    x_target = random.uniform(-0.2, 0.2)  # X축 목표 위치
+    rotation_target = random.uniform(-0.523599, 0.523599)  # -30도 ~ 30도 회전 (라디안 값)
 
-for obj in bpy.context.selected_objects:
-    obj.location.x = x_start  # 시작 위치
-    obj.keyframe_insert(data_path="location", frame=frame_start)
-    
-    obj.location.x = x_mid1  # 중간 위치 (-0.2)
-    obj.keyframe_insert(data_path="location", frame=frame_mid1)
-    
-    obj.location.x = x_mid1  # 동일 위치 유지
-    obj.keyframe_insert(data_path="location", frame=frame_mid3)
+    frame_end = frame_start + duration
+    frames.append((frame_start, frame_end, x_target, rotation_target))
 
-    obj.location.x = x_mid4  # 끝 위치 (0.2)
-    obj.keyframe_insert(data_path="location", frame=frame_mid4)
+    # 애니메이션 설정
+    for obj in bpy.context.selected_objects:
+        # X축 이동 설정
+        obj.location.x = x_target
+        obj.keyframe_insert(data_path="location", frame=frame_end)
 
-    obj.location.x = x_mid4  # 동일 위치 유지
-    obj.keyframe_insert(data_path="location", frame=frame_end)
+        # 회전 설정
+        obj.rotation_euler = (0, 0, rotation_target)
+        obj.keyframe_insert(data_path="rotation_euler", frame=frame_end)
 
-    # Y축을 기준으로 -15도 회전
-    obj.rotation_euler = (0, 0, 0)
-    obj.keyframe_insert(data_path="rotation_euler", frame=frame_start)
-    obj.rotation_euler = (0, 0, -0.261799)  # -15도
-    obj.keyframe_insert(data_path="rotation_euler", frame=frame_mid2)
-
-    # Y축을 기준으로 15도 회전
-    obj.rotation_euler = (0, 0, 0.261799)  # 15도
-    obj.keyframe_insert(data_path="rotation_euler", frame=frame_mid3)
-
-    # Y축을 기준으로 원래 위치로 돌아감
-    obj.rotation_euler = (0, 0, 0)
-    obj.keyframe_insert(data_path="rotation_euler", frame=frame_mid4)
-
-    # Y축을 기준으로 다시 -15도 회전
-    obj.rotation_euler = (0, 0, -0.261799)  # -15도
-    obj.keyframe_insert(data_path="rotation_euler", frame=frame_mid5)
-
-    # Y축을 기준으로 다시 15도 회전
-    obj.rotation_euler = (0, 0, 0.261799)  # 15도
-    obj.keyframe_insert(data_path="rotation_euler", frame=frame_end)
+    frame_start = frame_end
 
 # 애니메이션을 포함하여 GLB 파일로 내보내기
 bpy.ops.export_scene.gltf(filepath="{animated_glb_path}", export_format='GLB')
