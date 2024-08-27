@@ -170,7 +170,8 @@ class TSR(BaseModule):
         except Exception as err:
             print(f"An error occurred: {err}")
             raise
-
+    
+    # image to image
     def generate_image_with_dalle(self, image_content):
         # Define the prompt
         lines = [
@@ -179,10 +180,8 @@ class TSR(BaseModule):
             "2. Change the background to complete white.",
             "3. Ensure that there is only one object present in the image.",
             "4. Add a 3D style to the picture.",
-            # 색상 적용 부분 추가
-            "5. For the object, always apply the color that best matches it.",
-            "6. If a color is already specified, keep the object in that color."
         ]
+
         prompt = "\n".join(lines)
         # Call the API to generate the image
         response = openai.images.generate(
@@ -199,6 +198,7 @@ class TSR(BaseModule):
         # Open the image using PIL and return it
         return Image.open(BytesIO(image_response.content))
 
+    # text to image
     def generate_image_from_text(self, text: str) -> Image.Image:
         lines = [
             "Create a simple and clear image based on the following description:",
@@ -234,12 +234,12 @@ class TSR(BaseModule):
 
         return image
     
+    # 배경 생성
     def generate_image_with_background(self, image_content, text:str) -> Image.Image:
         lines = [
-            "Create a warm and cozy background that complements the existing content.",
-            "The background should evoke a sense of childhood wonder and innocence, filled with soft colors, gentle gradients, and elements that feel playful and comforting. ",
-            "Think of scenes like fluffy clouds, pastel-colored landscapes, or a whimsical garden with friendly animals. ",
-            "The design should inspire a feeling of warmth, safety, and joy, making it perfect for young children."
+            "Create only one background image following the instructions:",
+            "1. One output background image with fairytale atmosphere",
+            "2. No object of the input image should be in the output"
         ]
 
         prompt = "\n".join(lines)
