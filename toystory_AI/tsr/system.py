@@ -25,6 +25,8 @@ import requests
 import base64
 from io import BytesIO
 import rembg  # rembg 임포트
+import soundfile as sf  # 오디오 파일을 저장하기 위한 라이브러리
+from pydub import AudioSegment  # mp3 변환을 위한 라이브러리
 
 from dotenv import load_dotenv
 
@@ -36,6 +38,11 @@ if openai.api_key is None:
 
 # Initialize rembg session
 rembg_session = rembg.new_session()
+
+# Load MusicGen model
+from audiocraft.models import musicgen
+model = musicgen.MusicGen.get_pretrained('large', device='cuda')
+model.set_generation_params(duration=8)
 
 class TSR(BaseModule):
     @dataclass
@@ -180,6 +187,7 @@ class TSR(BaseModule):
             "2. Change the background to complete white.",
             "3. Ensure that there is only one object present in the image.",
             "4. Add a 3D style to the picture.",
+            "5. Render the object at a 15-degree angle to show a side view.",
         ]
 
         prompt = "\n".join(lines)
@@ -341,3 +349,40 @@ class TSR(BaseModule):
             )
             meshes.append(mesh)
         return meshes
+
+    def generate_music(self, prompt):
+        # Refined description to align more closely with a fairy-tale atmosphere
+        additional_description = (
+            "Imagine a magical world full of surprises and adventures."
+            "Music has to be light and soft melodies that make you feel at ease."
+            "Draw a soft, hopeful rhythm"
+            "Melody has to be delicate and inspiring, and it has to be suitable for scenes where magic and nature are intertwined."
+        )
+        
+        # Combine the original prompt with the additional description
+        combined_prompt = f"{prompt} {additional_description}"
+        print(f"Music Generation Prompt: {combined_prompt}")
+
+        # Generate the music with the combined prompt, increasing duration for a longer output
+        model.set_generation_params(duration=32)  # Increase duration to 32 seconds for a longer piece
+        res = model.generate([combined_prompt], progress=True)
+        
+        # Convert the generated tensor to audio bytes
+        audio_data = res[0].cpu().numpy().astype(np.float32).tobytes()
+
+        # Use pydub to create an AudioSegment with the maximum frame rate supported
+        audio = AudioSegment(
+            data=audio_data,
+            sample_width=4,  # 32-bit float is 4 bytes
+            frame_rate=192000,  # Set the frame rate to 192kHz, which is extremely high quality
+            channels=1
+        )
+
+        # Optionally, apply post-processing effects (e.g., normalization)
+        audio = audio.normalize()
+
+        # Save the audio directly as an MP3 file with a high bitrate
+        mp3_file_path = "output_audio.mp3"
+        audio.export(mp3_file_path, format="mp3", bitrate="320k")  # Use 320 kbps for best MP3 quality
+        
+        return mp3_file_path
