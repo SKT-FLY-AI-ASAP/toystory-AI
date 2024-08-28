@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 if torch.cuda.is_available():
-    device = "cuda:0"
+    device = "cpu"#"cuda:0"
 else:
     device = "cpu"
 
@@ -106,9 +106,10 @@ def process_and_generate(input_image=None, input_text=None, input_s3_url=None, m
     backgrounded_image_path = os.path.join(output_dir, f"{title}_backgrounded.png")
     backgrounded_image.save(backgrounded_image_path)
 
-    # Modify the blender script with the correct file paths and animate the model
+    # Set the animated GLB path
     animated_glb_path = os.path.join(output_dir, f"{title}_animated.glb")
 
+    # Modify the blender script with the correct file paths and animate the model
     blender_script = f"""
 import bpy
 import random
@@ -166,8 +167,11 @@ print("Animated GLB file saved to:", animated_glb_path)
     except subprocess.CalledProcessError as e:
         raise Exception(f"Blender script execution failed: {str(e)}")
 
+    # Generate music and save locally
+    mp3_file_path = model.generate_music(image_content)
+
     # Return the individual file paths for Gradio to handle each output separately
-    return processed_image_path, backgrounded_image_path, animated_glb_path, stl_file_path
+    return processed_image_path, backgrounded_image_path, animated_glb_path, stl_file_path, mp3_file_path
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -179,19 +183,19 @@ if __name__ == '__main__':
     parser.add_argument("--queuesize", type=int, default=1, help="launch gradio queue max_size")
     args = parser.parse_args()
 
-    with gr.Blocks(title="TripoSR") as interface:
+    with gr.Blocks(title="Toystory") as interface:
         gr.Markdown(
             """
         # Toystory Demo
-        [Toystory](https://github.com/SKT-FLY-AI-ASAP/toystory-AI) is a model for 3D reconstruction from single image, based on TripoSR(https://github.com/VAST-AI-Research/TripoSR).
+        [Toystory](https://github.com/SKT-FLY-AI-ASAP/toystory-AI) is a model for 3D reconstruction from a single image, based on TripoSR(https://github.com/VAST-AI-Research/TripoSR).
         
         **How To Use:**
         1. Use the picture in the sample or try putting in the 2D image yourself.
         * It's better to disable "Remove Background" for the provided examples since they have been already preprocessed.
         2. Describe the image you want to create in Text.
-        3. Enter S3 url as input.
+        3. Enter the S3 URL as input.
         4. If you press Create, it corrects the 2D image and recommends the appropriate background.
-         5. You can download the desired results.
+        5. You can download the desired results.
         """
         )
         # Input section
@@ -210,20 +214,19 @@ if __name__ == '__main__':
                 foreground_ratio = gr.Slider(label="Foreground Ratio", minimum=0.5, maximum=1.0, value=0.85, step=0.05)
                 mc_resolution = gr.Slider(label="Marching Cubes Resolution", minimum=32, maximum=320, value=256, step=32)
                 submit_button = gr.Button("Generate 3D Model", elem_id="generate", variant="primary")
-            # Output section
             with gr.Column():
                 processed_image = gr.Image(label="Processed Image", interactive=False)
                 backgrounded_image = gr.Image(label="Backgrounded Image (PNG)", interactive=False)
                 output_animated_glb = gr.Model3D(label="Output Animated GLB", interactive=False)
                 output_stl = gr.Model3D(label="Output STL Format", interactive=False)
+                mp3_output = gr.Audio(label="Generated Audio (MP3)", interactive=False)
 
         submit_button.click(
             fn=process_and_generate,
             inputs=[input_image, input_text, input_s3_url, mc_resolution, do_remove_background, foreground_ratio],
-            outputs=[processed_image, backgrounded_image, output_animated_glb, output_stl]
+            outputs=[processed_image, backgrounded_image, output_animated_glb, output_stl, mp3_output]
         )
 
-        # Examples section
         gr.Examples(
             examples=[
                 "examples/toy_bingbong.png",
@@ -237,17 +240,14 @@ if __name__ == '__main__':
                 "examples/image_4.png",
             ],
             inputs=[input_image],
-            outputs=[processed_image, backgrounded_image, output_animated_glb, output_stl],
-            cache_examples=False,
-            fn=process_and_generate,
-            label="Examples",
-            examples_per_page=20,
+            outputs=[processed_image, backgrounded_image, output_animated_glb, output_stl, mp3_output],
+            cache_examples=False
         )
 
-    interface.queue(max_size=args.queuesize)
-    interface.launch(
-        auth=(args.username, args.password) if (args.username and args.password) else None,
-        share=args.share,
-        server_name="0.0.0.0" if args.listen else None,
-        server_port=args.port
-    )
+        interface.queue(max_size=args.queuesize)
+        interface.launch(
+            auth=(args.username, args.password) if (args.username and args.password) else None,
+            share=args.share,
+            server_name="0.0.0.0" if args.listen else None,
+            server_port=args.port
+        )
