@@ -94,74 +94,13 @@ def process_and_generate(input_image=None, input_text=None, input_s3_url=None, m
     mesh = model.extract_mesh(scene_codes, True, resolution=mc_resolution)[0]
     mesh = to_gradio_3d_orientation(mesh)
 
-    # Set the GLB and animated GLB paths
-    static_glb_path = os.path.join(output_dir, f"{title}.glb")
-    animated_glb_path = os.path.join(output_dir, f"{title}_animated.glb")
-
-    # Modify the blender script with the correct file paths and animate the model
-    blender_script = f"""
-import bpy
-import random
-
-# Blender 초기화 - 기존 씬 초기화
-bpy.ops.wm.read_factory_settings(use_empty=True)
-
-# GLB 파일 불러오기
-bpy.ops.import_scene.gltf(filepath="{static_glb_path}")
-
-# GLB 파일의 오브젝트들을 축소하고 Y축 방향으로 이동
-for obj in bpy.context.selected_objects:
-    obj.scale = (0.3, 0.3, 0.3)  # 오브젝트 크기를 30%로 축소
-    obj.location.y += 0.3  # 원하는 만큼 Y축 방향으로 이동
-    obj.location.z -= 0.2
-
-# 애니메이션 설정
-frame_start = 1
-frames = []
-
-# X축과 Y축 애니메이션 설정 (총 5번 반복)
-for i in range(5):
-    duration = random.randint(40, 80)  # 40~80프레임 동안 이동 및 회전 (약 1.5초~3초)
-    x_target = random.uniform(-0.2, 0.2)  # X축 목표 위치
-    rotation_target = random.uniform(-0.523599, 0.523599)  # -30도 ~ 30도 회전 (라디안 값)
-
-    frame_end = frame_start + duration
-    frames.append((frame_start, frame_end, x_target, rotation_target))
-
-    # 애니메이션 설정
-    for obj in bpy.context.selected_objects:
-        # X축 이동 설정
-        obj.location.x = x_target
-        obj.keyframe_insert(data_path="location", frame=frame_end)
-
-        # 회전 설정
-        obj.rotation_euler = (0, 0, rotation_target)
-        obj.keyframe_insert(data_path="rotation_euler", frame=frame_end)
-
-    frame_start = frame_end
-
-# 애니메이션을 포함하여 GLB 파일로 내보내기
-bpy.ops.export_scene.gltf(filepath="{animated_glb_path}", export_format='GLB')
-print("Animated GLB file saved to:", "{animated_glb_path}")
-"""
-
-    # Save the script to a temporary file
-    blender_script_path = os.path.join(output_dir, f"{title}_blender_script.py")
-    with open(blender_script_path, 'w') as f:
-        f.write(blender_script)
-
     # Save the static GLB file
+    static_glb_path = os.path.join(output_dir, f"{title}.glb")
     mesh.export(static_glb_path)
-
-    # Execute the Blender script for animated GLB
-    try:
-        subprocess.run(["blender", "--background", "--python", blender_script_path], check=True)
-    except subprocess.CalledProcessError as e:
-        raise Exception(f"Blender script execution failed: {str(e)}")
 
     # Generate STL file
     stl_file_path = os.path.join(output_dir, f"{title}.stl")
-    scene = a3d.Scene.from_file(animated_glb_path)
+    scene = a3d.Scene.from_file(static_glb_path)
     scene.save(stl_file_path)
 
     # Generate background image and save locally
@@ -173,7 +112,7 @@ print("Animated GLB file saved to:", "{animated_glb_path}")
     mp3_file_path = model.generate_music(image_content, input_text)
 
     # Return the individual file paths for Gradio to handle each output separately
-    return processed_image_path, backgrounded_image_path, static_glb_path, animated_glb_path, stl_file_path, mp3_file_path
+    return processed_image_path, backgrounded_image_path, static_glb_path, stl_file_path, mp3_file_path
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -220,14 +159,13 @@ if __name__ == '__main__':
                 processed_image = gr.Image(label="Processed Image", interactive=False)
                 backgrounded_image = gr.Image(label="Backgrounded Image (PNG)", interactive=False)
                 output_glb = gr.Model3D(label="Output GLB (Static)", interactive=False)
-                output_animated_glb = gr.Model3D(label="Output Animated GLB", interactive=False)
                 output_stl = gr.Model3D(label="Output STL Format", interactive=False)
                 mp3_output = gr.Audio(label="Generated Audio (MP3)", interactive=False)
 
         submit_button.click(
             fn=process_and_generate,
             inputs=[input_image, input_text, input_s3_url, mc_resolution, do_remove_background, foreground_ratio],
-            outputs=[processed_image, backgrounded_image, output_glb, output_animated_glb, output_stl, mp3_output]
+            outputs=[processed_image, backgrounded_image, output_glb, output_stl, mp3_output]
         )
 
         gr.Examples(
@@ -246,7 +184,7 @@ if __name__ == '__main__':
                 "examples/frog.png",
             ],
             inputs=[input_image],
-            outputs=[processed_image, backgrounded_image, output_glb, output_animated_glb, output_stl, mp3_output],
+            outputs=[processed_image, backgrounded_image, output_glb, output_stl, mp3_output],
             cache_examples=False
         )
 
