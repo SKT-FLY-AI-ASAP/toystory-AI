@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 if torch.cuda.is_available():
-    device = "cpu"#"cuda:0"
+    device = "cpu"  # "cuda:0"
 else:
     device = "cpu"
 
@@ -171,7 +171,7 @@ print("Animated GLB file saved to:", animated_glb_path)
     mp3_file_path = model.generate_music(image_content)
 
     # Return the individual file paths for Gradio to handle each output separately
-    return processed_image_path, backgrounded_image_path, animated_glb_path, stl_file_path, mp3_file_path
+    return processed_image_path, backgrounded_image_path, glb_file_path, animated_glb_path, stl_file_path, mp3_file_path
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -217,6 +217,7 @@ if __name__ == '__main__':
             with gr.Column():
                 processed_image = gr.Image(label="Processed Image", interactive=False)
                 backgrounded_image = gr.Image(label="Backgrounded Image (PNG)", interactive=False)
+                output_glb = gr.Model3D(label="Output GLB (Static)", interactive=False)
                 output_animated_glb = gr.Model3D(label="Output Animated GLB", interactive=False)
                 output_stl = gr.Model3D(label="Output STL Format", interactive=False)
                 mp3_output = gr.Audio(label="Generated Audio (MP3)", interactive=False)
@@ -224,7 +225,7 @@ if __name__ == '__main__':
         submit_button.click(
             fn=process_and_generate,
             inputs=[input_image, input_text, input_s3_url, mc_resolution, do_remove_background, foreground_ratio],
-            outputs=[processed_image, backgrounded_image, output_animated_glb, output_stl, mp3_output]
+            outputs=[processed_image, backgrounded_image, output_glb, output_animated_glb, output_stl, mp3_output]
         )
 
         gr.Examples(
@@ -240,7 +241,7 @@ if __name__ == '__main__':
                 "examples/image_4.png",
             ],
             inputs=[input_image],
-            outputs=[processed_image, backgrounded_image, output_animated_glb, output_stl, mp3_output],
+            outputs=[processed_image, backgrounded_image, output_glb, output_animated_glb, output_stl, mp3_output],
             cache_examples=False
         )
 
