@@ -133,7 +133,7 @@ class TSR(BaseModule):
             "Authorization": f"Bearer {openai.api_key}"
         }
         payload = {
-            "model": "gpt-4o-mini",
+            "model": "gpt-4o",
             "messages": [
                 {
                     "role": "user",
@@ -217,11 +217,12 @@ class TSR(BaseModule):
     
     def generate_image_with_background(self, image_content, text: str) -> Image.Image:
         lines = [
-            "Generate one background image based on the following instructions:",
-            "1. The background should depict a location or setting that reflects the mood, colors, and overall atmosphere of the input image content. Use the implied theme and tone to guide the choice of location.",
-            "2. Apply colors that complement the image content and align with the overall mood, ensuring the color scheme is harmonious.",
-            "3. Do not include any specific objects or characters from the input image; focus on creating a cohesive environment or scene that captures the intended feeling.",
-            "4. Ensure the location has a playful, childlike atmosphere, suitable for the theme, while still being recognizable as a specific place."
+            "1. The background should depict a location or setting that reflects the mood, colors, and overall atmosphere of the input image content.",
+            "2. Use the implied theme and tone to guide the choice of location.",
+            "3. Apply colors that complement the image content and align with the overall mood, ensuring the color scheme is harmonious.",
+            "4. Do not include any specific objects or characters from the input image; focus on creating a cohesive environment or scene that captures the intended feeling.",
+            "5. Ensure the location has a playful, childlike atmosphere, suitable for the theme, while still being recognizable as a specific place.",
+            "Based on the above conditions, generate a background that matches the image content or text."
         ]
         prompt = "\n".join(lines)
         response = openai.images.generate(
