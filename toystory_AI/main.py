@@ -23,7 +23,7 @@ class ContentRequest(BaseModel):
 class GeneratedContent(BaseModel):
     png_url: str = None
     bg_png_url: str = None
-    animated_glb_url: str = None
+    glb_url: str = None
     stl_url: str = None
     mp3_url: str = None
 
@@ -64,12 +64,12 @@ def generate_content(content_req: ContentRequest):
     try:
         # 이미지 URL 또는 프롬프트를 사용하여 콘텐츠 생성
         if content_req.prompt:
-            png_path, bg_png_path, stl_path, animated_glb_path, mp3_path = process_and_generate(
+            png_path, bg_png_path, glb_path, stl_path, mp3_path = process_and_generate(
                 input_text=content_req.prompt,
                 title=f"{content_req.user_id}-{content_req.title}"
             )
         elif content_req.image_url:
-            png_path, bg_png_path, stl_path, animated_glb_path, mp3_path = process_and_generate(
+            png_path, bg_png_path, glb_path, stl_path, mp3_path = process_and_generate(
                 input_s3_url=content_req.image_url,
                 title=f"{content_req.user_id}-{content_req.title}"
             )
@@ -80,12 +80,12 @@ def generate_content(content_req: ContentRequest):
         key_mapping = {
             png_path: "png_url",
             bg_png_path: "bg_png_url",
+            glb_path: "glb_url",
             stl_path: "stl_url",
-            animated_glb_path: "animated_glb_url",
             mp3_path: "mp3_url"
         }
         res = {}
-        for file_path in [png_path, bg_png_path, stl_path, animated_glb_path, mp3_path]:
+        for file_path in [png_path, bg_png_path, glb_path, stl_path, mp3_path]:
             with open(file_path, 'rb') as file:
                 current_time = datetime.now().strftime('%Y%m%dT%H:%M:%S')
                 url = add_to_s3(file=file, object_name=f'{current_time}.{os.path.basename(file_path)}')
