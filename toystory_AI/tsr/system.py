@@ -39,11 +39,6 @@ if openai.api_key is None:
 # Initialize rembg session
 rembg_session = rembg.new_session()
 
-# Load MusicGen model
-from audiocraft.models import musicgen
-model = musicgen.MusicGen.get_pretrained('large', device='cuda')
-model.set_generation_params(duration=8)
-
 class TSR(BaseModule):
     @dataclass
     class Config(BaseModule.Config):
@@ -109,10 +104,7 @@ class TSR(BaseModule):
         ],
         device: str,
     ) -> torch.FloatTensor:
-        # 기존 이미지 입력을 통한 처리
-        rgb_cond = self.image_processor(image, self.cfg.cond_image_size)[:, None].to(
-            device
-        )
+        rgb_cond = self.image_processor(image, self.cfg.cond_image_size)[:, None].to(device)
         batch_size = rgb_cond.shape[0]
         input_image_tokens: torch.Tensor = self.image_tokenizer(
             rearrange(rgb_cond, "B Nv H W C -> B Nv C H W", Nv=1),
@@ -130,7 +122,6 @@ class TSR(BaseModule):
 
     def encode_image(self, image):
         if isinstance(image, np.ndarray):
-            # numpy 배열을 PIL 이미지로 변환
             image = Image.fromarray(image.astype(np.uint8))
         buffered = BytesIO()
         image.save(buffered, format="PNG")
@@ -164,10 +155,8 @@ class TSR(BaseModule):
         }
         try:
             response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-            response.raise_for_status()  # HTTP 오류 발생 시 예외를 일으킴
+            response.raise_for_status()
             response_json = response.json()
-            # 응답 내용 로그 추가 (디버깅 용도)
-            print("GPT-4 API Response:", response_json)
             if 'choices' not in response_json or not response_json['choices']:
                 raise KeyError("'choices' key not found in the response or it's empty.")
             return response_json['choices'][0]['message']['content']
@@ -180,111 +169,74 @@ class TSR(BaseModule):
     
     # image to image
     def generate_image_with_dalle(self, image_content):
-        # Define the prompt
         lines = [
-            "Modify the image following the instructions:",
-            "1. The content of the image: " + image_content,
-            "2. Change the background to complete white.",
-            "3. Ensure that there is only one object present in the image.",
-            "4. Add a 3D style to the picture.",
-            "5. Render the object at a 15-degree angle to show a side view.",
+            "Modify the image based on the following instructions:",
+            "1. Image content: " + image_content,
+            "2. Change the background to a solid white color.",
+            "3. Ensure that only one object is present in the image.",
+            "4. Apply a 3D style to the object.",
+            "5. Position the object at a 15-degree angle to show a side view.",
+            "6. Choose and apply colors that complement the image content and enhance the overall theme. The colors should harmonize with the mood and atmosphere of the object."
         ]
-        # lines = [
-        #     "Modify the image based on the following instructions:",
-        #     "1. Image content: " + image_content,
-        #     "2. Change the background to a solid white color.",
-        #     "3. Ensure that only one object is present in the image.",
-        #     "4. Apply a 3D style to the object.",
-        #     "5. Position the object at a 15-degree angle to show a side view."
-        # ]
-
         prompt = "\n".join(lines)
-        # Call the API to generate the image
         response = openai.images.generate(
             model="dall-e-3",
             prompt=prompt,
-            size="1024x1024",  # Size of the generated image
+            size="1024x1024",
             quality="standard",
-            n=1,  # Number of images to generate
+            n=1,
         )
-        # Extract the URL of the generated image
         image_url = response.data[0].url
         print(f"Generated Image URL: {image_url}")
         image_response = requests.get(image_url)
-        # Open the image using PIL and return it
         return Image.open(BytesIO(image_response.content))
 
-    # text to image
     def generate_image_from_text(self, text: str) -> Image.Image:
-        # lines = [
-        #     "Create a simple and clear image based on the following description:",
-        #     text,
-        #     "Use a plain white background.",
-        #     "The object should be centered and take up most of the image space.",
-        #     "Apply a 3D rendering style.",
-        #     "Render the object at a 15-degree angle to show a side view.",
-        #     "Ensure the image is appropriate and safe for all audiences."
-        # ]
-        lines = [
-            "Generate a straightforward and clear image following this description:",
-            text,
-            "Set the background to plain white.",
-            "Center the object in the image, making it occupy most of the available space.",
-            "Use a 3D rendering style for the object.",
-            "Position the object at a 15-degree angle to show a slight side view.",
-            "Ensure the image is suitable and safe for all audiences."
-        ]
-
-        prompt = "\n".join(lines)
-
-        # Call the API to generate the image
-        response = openai.images.generate(
-            model="dall-e-3",
-            prompt=prompt,
-            size="1024x1024",  # Size of the generated image
-            quality="standard",
-            n=1  # Number of images to generate
-        )
-        
-        # Extract the URL of the generated image
-        image_url = response.data[0].url
-        print(f"Generated Image URL: {image_url}")
-        image_response = requests.get(image_url)
-
-        # Open the image using PIL and return it
-        image = Image.open(BytesIO(image_response.content))
-
-        # Step to remove the background after generating the image
-        image = remove_background(image, rembg_session)
-
-        return image
-    
-    # 배경 생성
-    def generate_image_with_background(self, image_content, text:str) -> Image.Image:
         lines = [
             "Generate one background image based on the following instructions:",
-            "1. The background should have a playful, childlike atmosphere inspired by the input image.",
-            "2. Ensure that no objects from the input image are included in the generated background.",
+            "1. The background should depict a location or setting that reflects the mood, colors, and overall atmosphere of the input image content. Use the implied theme and tone to guide the choice of location.",
+            "2. Apply colors that complement the image content and align with the overall mood, ensuring the color scheme is harmonious.",
+            "3. Do not include any specific objects or characters from the input image; focus on creating a cohesive environment or scene that captures the intended feeling.",
+            "4. Ensure the location has a playful, childlike atmosphere, suitable for the theme, while still being recognizable as a specific place."
         ]
-
         prompt = "\n".join(lines)
-
-        # Call the API to generate the image
         response = openai.images.generate(
             model="dall-e-3",
             prompt=prompt,
-            size="1024x1024",  # Size of the generated image
+            size="1024x1024",
             quality="standard",
-            n=1  # Number of images to generate
+            n=1
         )
         
-        # Extract the URL of the generated image
         image_url = response.data[0].url
         print(f"Generated Image URL: {image_url}")
         image_response = requests.get(image_url)
-
-        return Image.open(BytesIO(image_response.content))
+        image = Image.open(BytesIO(image_response.content))
+        image = remove_background(image, rembg_session)
+        return image
     
+    def generate_image_with_background(self, image_content, text: str) -> Image.Image:
+        lines = [
+            "Generate one background image based on the following instructions:",
+            "1. The background should depict a location or setting that reflects the mood, colors, and overall atmosphere of the input image content. Use the implied theme and tone to guide the choice of location.",
+            "2. Apply colors that complement the image content and align with the overall mood, ensuring the color scheme is harmonious.",
+            "3. Do not include any specific objects or characters from the input image; focus on creating a cohesive environment or scene that captures the intended feeling.",
+            "4. Ensure the location has a playful, childlike atmosphere, suitable for the theme, while still being recognizable as a specific place."
+        ]
+        prompt = "\n".join(lines)
+        response = openai.images.generate(
+            model="dall-e-3",
+            prompt=prompt,
+            size="1024x1024",
+            quality="standard",
+            n=1
+        )
+        
+        image_url = response.data[0].url
+        print(f"Generated Image URL: {image_url}")
+        image_response = requests.get(image_url)
+        return Image.open(BytesIO(image_response.content))
+
     def render(
         self,
         scene_codes,
@@ -367,66 +319,78 @@ class TSR(BaseModule):
             meshes.append(mesh)
         return meshes
 
-    def generate_music(self, prompt):
-        # Refined description to align more closely with a fairy-tale atmosphere
+    def select_music(self, category):
+        music_directory = 'music'
+        music_files = {
+            'superhero': '1_superhero.mp3',
+            'fantasy': '2_fantasy.mp3',
+            'universe': '3_universe.mp3',
+            'robot': '4_robot.mp3',
+            'vehicle': '5_car_racing.wav',
+            'dinosaur': '6_dinosaur.mp3',
+            'doll': '7_doll.mp3',
+            'animal': '8_animal.mp3',
+            'adventure': '9_adventure.mp3',
+            'fairytale': '10_fairytale.mp3'
+        }
+
+        # Default to 'fairytale' if the category is not found
+        music_file = music_files.get(category, '10_fairytale.mp3')
+        music_path = os.path.join(music_directory, music_file)
+
+        # Check if the file exists
+        if not os.path.exists(music_path):
+            raise FileNotFoundError(f"Music file not found: {music_path}")
+
+        # Load and return the selected music file
+        music = AudioSegment.from_file(music_path)
+        return music
+
+    def generate_music(self, image_content, text):
+        # Refined description to align more closely with the image content
         additional_description = (
-            "Imagine a magical world full of surprises and adventures."
-            "Music has to be light and soft melodies that make you feel at ease."
-            "Draw a soft, hopeful rhythm."
+            "Imagine a magical world full of surprises and adventures. "
+            "Music has to be light and soft melodies that make you feel at ease. "
+            "Draw a soft, hopeful rhythm. "
             "Melody has to be delicate and inspiring, and it has to be suitable for scenes where magic and nature are intertwined."
         )
         
-        # Combine the original prompt with the additional description
-        combined_prompt = f"{prompt} {additional_description}"
+        combined_prompt = f"{image_content} {text} {additional_description}"
         print(f"Music Generation Prompt: {combined_prompt}")
 
-        # Define headers and payload for API call to categorize the image
+        # API call to categorize the image content or text
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {openai.api_key}"
         }
-
         payload = {
             "model": "gpt-4o",
             "messages": [
                 {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "Answer in one word. Among these categories in the list: [superhero, fantasy, universe, robot, vehicle, dinosaur, doll, animal, adventure, fairytale], the sentence fits to which category? sentence: " + combined_prompt
-                        }
-                    ]
+                  "role": "user",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": f"Answer in one word. Among these categories in the list: [superhero, fantasy, universe, robot, vehicle, dinosaur, doll, animal, adventure, fairytale], this sentence fits which category? sentence: {combined_prompt}"
+                    }
+                  ]
                 }
             ],
             "max_tokens": 300
         }
 
-        # API call to categorize the prompt
         category_response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
         category_response_json = category_response.json()
-        category_content = category_response_json['choices'][0]['message']['content'].lower()  # Convert category name to lowercase
-        
-        # Generate the music with the combined prompt, increasing duration for a longer output
-        model.set_generation_params(duration=32)  # Increase duration to 32 seconds for a longer piece
-        res = model.generate([combined_prompt], progress=True)
-        
-        # Convert the generated tensor to audio bytes
-        audio_data = res[0].cpu().numpy().astype(np.float32).tobytes()
+        category_content = category_response_json['choices'][0]['message']['content'].lower().strip()
 
-        # Use pydub to create an AudioSegment with the maximum frame rate supported
-        audio = AudioSegment(
-            data=audio_data,
-            sample_width=4,  # 32-bit float is 4 bytes
-            frame_rate=192000,  # Set the frame rate to 192kHz, which is extremely high quality
-            channels=1
-        )
+        # Select the appropriate music file based on the category
+        selected_music = self.select_music(category_content)
 
-        # Optionally, apply post-processing effects (e.g., normalization)
-        audio = audio.normalize()
-
-        # Save the audio directly as an MP3 file with a high bitrate
-        mp3_file_path = f"output_audio_{category_content}.mp3"  # Use category content in the file name
-        audio.export(mp3_file_path, format="mp3", bitrate="320k")  # Use 320 kbps for best MP3 quality
+        # Save the selected music to an output path
+        output_music_path = f"output_audio_{category_content}.mp3"
+        selected_music.export(output_music_path, format="mp3", bitrate="320k")
         
-        return mp3_file_path
+        print(f"Selected music category: {category_content}")
+        print(f"Music file saved to: {output_music_path}")
+        
+        return output_music_path
