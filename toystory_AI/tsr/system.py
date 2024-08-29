@@ -170,12 +170,12 @@ class TSR(BaseModule):
     # image to image
     def generate_image_with_dalle(self, image_content):
         lines = [
-            "Generate one centered background image based on the following instructions:",
-            "1. The background should depict a location or setting that reflects the mood, colors, and overall atmosphere associated with a 3D character based on the following description: '" + image_content + "'. Use the implied theme and tone to guide the choice of location.",
+            "Generate one centered image based on the following instructions:",
+            "1. The image should depict a location or setting that reflects the mood, colors, and overall atmosphere associated with a 3D character based on the following description: '" + image_content + "'. Use the implied theme and tone to guide the choice of location.",
             "2. Apply colors that complement the character's theme and mood, ensuring the color scheme is harmonious and enhances the character's presence.",
-            "3. The background should be plain white, with no objects, textures, or additional elements.",
+            "3. Do not generate any background; the image should only focus on the foreground elements.",
             "4. Ensure the location has a playful, childlike atmosphere, suitable for the character's theme, while still being recognizable as a specific place.",
-            "5. The background should be visually centered and balanced, with key elements or focus areas positioned towards the center of the image to draw attention to the character's placement in the scene."
+            "5. The image should be visually centered and balanced, with key elements or focus areas positioned towards the center of the image to draw attention to the character's placement in the scene."
         ]
         prompt = "\n".join(lines)
         response = openai.images.generate(
@@ -192,12 +192,12 @@ class TSR(BaseModule):
 
     def generate_image_from_text(self, text: str) -> Image.Image:
         lines = [
-            "Generate one centered background image based on the following instructions:",
-            "1. The background should depict a location or setting that reflects the mood, colors, and overall atmosphere associated with a 3D character based on the following description: '" + text + "'. Use the implied theme and tone to guide the choice of location.",
-            "2. Apply colors that complement the character's theme and mood, ensuring the color scheme is harmonious and enhances the character's presence.",
-            "3. The background should be plain white, with no objects, textures, or additional elements.",
-            "4. Ensure the location has a playful, childlike atmosphere, suitable for the character's theme, while still being recognizable as a specific place.",
-            "5. The background should be visually centered and balanced, with key elements or focus areas positioned towards the center of the image to draw attention to the character's placement in the scene."
+            "Generate a straightforward and clear image following this description:",
+            text,
+            "Set the background to plain white.",
+            "Center the object in the image, making it occupy most of the available space.",
+            "Use a 3D rendering style for the object.",
+            "Position the object at a 15-degree angle to show a slight side view."
         ]
         prompt = "\n".join(lines)
         response = openai.images.generate(
