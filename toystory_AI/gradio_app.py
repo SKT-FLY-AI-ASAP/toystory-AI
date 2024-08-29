@@ -44,6 +44,7 @@ def process_and_generate(input_image=None, input_text=None, input_s3_url=None, m
 
     # Step 1: Fetch and preprocess the input
     image_content = None
+    prompt = input_text  # Define the prompt
 
     if input_s3_url:
         response = requests.get(input_s3_url)
@@ -93,20 +94,8 @@ def process_and_generate(input_image=None, input_text=None, input_s3_url=None, m
     mesh = model.extract_mesh(scene_codes, True, resolution=mc_resolution)[0]
     mesh = to_gradio_3d_orientation(mesh)
 
-    glb_file_path = os.path.join(output_dir, f"{title}.glb")
-    mesh.export(glb_file_path)
-
-    # Generate STL file
-    stl_file_path = os.path.join(output_dir, f"{title}.stl")
-    scene = a3d.Scene.from_file(glb_file_path)
-    scene.save(stl_file_path)
-
-    # Generate background image and save locally
-    backgrounded_image = model.generate_image_with_background(image_content, input_text or "Generated Image")
-    backgrounded_image_path = os.path.join(output_dir, f"{title}_backgrounded.png")
-    backgrounded_image.save(backgrounded_image_path)
-
-    # Set the animated GLB path
+    # Set the GLB and animated GLB paths
+    static_glb_path = os.path.join(output_dir, f"{title}.glb")
     animated_glb_path = os.path.join(output_dir, f"{title}_animated.glb")
 
     # Modify the blender script with the correct file paths and animate the model
@@ -118,7 +107,7 @@ import random
 bpy.ops.wm.read_factory_settings(use_empty=True)
 
 # GLB 파일 불러오기
-bpy.ops.import_scene.gltf(filepath="{glb_file_path}")
+bpy.ops.import_scene.gltf(filepath="{static_glb_path}")
 
 # GLB 파일의 오브젝트들을 축소하고 Y축 방향으로 이동
 for obj in bpy.context.selected_objects:
@@ -153,25 +142,38 @@ for i in range(5):
 
 # 애니메이션을 포함하여 GLB 파일로 내보내기
 bpy.ops.export_scene.gltf(filepath="{animated_glb_path}", export_format='GLB')
-print("Animated GLB file saved to:", animated_glb_path)
-    """
+print("Animated GLB file saved to:", "{animated_glb_path}")
+"""
 
     # Save the script to a temporary file
     blender_script_path = os.path.join(output_dir, f"{title}_blender_script.py")
     with open(blender_script_path, 'w') as f:
         f.write(blender_script)
 
-    # Execute the Blender script
+    # Save the static GLB file
+    mesh.export(static_glb_path)
+
+    # Execute the Blender script for animated GLB
     try:
         subprocess.run(["blender", "--background", "--python", blender_script_path], check=True)
     except subprocess.CalledProcessError as e:
         raise Exception(f"Blender script execution failed: {str(e)}")
 
+    # Generate STL file
+    stl_file_path = os.path.join(output_dir, f"{title}.stl")
+    scene = a3d.Scene.from_file(animated_glb_path)
+    scene.save(stl_file_path)
+
+    # Generate background image and save locally
+    backgrounded_image = model.generate_image_with_background(image_content, input_text or "Generated Image")
+    backgrounded_image_path = os.path.join(output_dir, f"{title}_backgrounded.png")
+    backgrounded_image.save(backgrounded_image_path)
+
     # Generate music and save locally
-    mp3_file_path = model.generate_music(image_content)
+    mp3_file_path = model.generate_music(image_content, input_text)
 
     # Return the individual file paths for Gradio to handle each output separately
-    return processed_image_path, backgrounded_image_path, glb_file_path, animated_glb_path, stl_file_path, mp3_file_path
+    return processed_image_path, backgrounded_image_path, static_glb_path, animated_glb_path, stl_file_path, mp3_file_path
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -239,6 +241,9 @@ if __name__ == '__main__':
                 "examples/image_2.png",
                 "examples/image_3.png",
                 "examples/image_4.png",
+                "examples/bird.PNG",
+                "examples/dinosaur.png",
+                "examples/frog.png",
             ],
             inputs=[input_image],
             outputs=[processed_image, backgrounded_image, output_glb, output_animated_glb, output_stl, mp3_output],
