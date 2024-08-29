@@ -169,13 +169,21 @@ class TSR(BaseModule):
     
     # image to image
     def generate_image_with_dalle(self, image_content):
+        # lines = [
+        #     "Generate one centered image based on the following instructions:",
+        #     "1. The image should depict a location or setting that reflects the mood, colors, and overall atmosphere associated with a 3D character based on the following description: '" + image_content + "'. Use the implied theme and tone to guide the choice of location.",
+        #     "2. Apply colors that complement the character's theme and mood, ensuring the color scheme is harmonious and enhances the character's presence.",
+        #     "3. Do not generate any background; the image should only focus on the foreground elements.",
+        #     "4. Ensure the location has a playful, childlike atmosphere, suitable for the character's theme, while still being recognizable as a specific place.",
+        #     #"5. The image should be visually centered and balanced, with key elements or focus areas positioned towards the center of the image to draw attention to the character's placement in the scene."
+        # ]
         lines = [
-            "Generate one centered image based on the following instructions:",
-            "1. The image should depict a location or setting that reflects the mood, colors, and overall atmosphere associated with a 3D character based on the following description: '" + image_content + "'. Use the implied theme and tone to guide the choice of location.",
-            "2. Apply colors that complement the character's theme and mood, ensuring the color scheme is harmonious and enhances the character's presence.",
-            "3. Do not generate any background; the image should only focus on the foreground elements.",
-            "4. Ensure the location has a playful, childlike atmosphere, suitable for the character's theme, while still being recognizable as a specific place.",
-            "5. The image should be visually centered and balanced, with key elements or focus areas positioned towards the center of the image to draw attention to the character's placement in the scene."
+            "Modify the image based on the following instructions:",
+            "1. Image content: " + image_content,
+            "2. Change the background to a solid white color.",
+            "3. Ensure that only one object is present in the image.",
+            "4. Apply a 3D style to the object.",
+            "5. Position the object at a 15-degree angle to show a side view."
         ]
         prompt = "\n".join(lines)
         response = openai.images.generate(
@@ -217,9 +225,9 @@ class TSR(BaseModule):
 
     def generate_image_with_background(self, image_content, text: str) -> Image.Image:
         lines = [
-            "1. The background should depict a location or setting that reflects the mood, colors, and overall atmosphere of the input image content.",
+            "1. The background should depict a location or setting that reflects the mood and overall atmosphere of the input image content.",
             "2. Use the implied theme and tone to guide the choice of location.",
-            "3. Apply colors that complement the image content and align with the overall mood, ensuring the color scheme is harmonious.",
+            "3. Ensure the background colors align with the overall mood, but do not generate or display a separate color palette.",
             "4. Do not include any specific objects or characters from the input image; focus on creating a cohesive environment or scene that captures the intended feeling.",
             "5. Ensure the location has a playful, childlike atmosphere, suitable for the theme, while still being recognizable as a specific place.",
             "Based on the above conditions, generate a background that matches the image content or text."
