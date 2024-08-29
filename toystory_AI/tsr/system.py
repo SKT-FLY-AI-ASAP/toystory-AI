@@ -170,13 +170,12 @@ class TSR(BaseModule):
     # image to image
     def generate_image_with_dalle(self, image_content):
         lines = [
-            "Modify the image based on the following instructions:",
-            "1. Image content: " + image_content,
-            "2. Change the background to a solid white color.",
-            "3. Ensure that only one object is present in the image.",
-            "4. Apply a 3D style to the object.",
-            "5. Position the object at a 15-degree angle to show a side view.",
-            "6. Choose and apply colors that complement the image content and enhance the overall theme. The colors should harmonize with the mood and atmosphere of the object."
+            "Generate one centered background image based on the following instructions:",
+            "1. The background should depict a location or setting that reflects the mood, colors, and overall atmosphere associated with a 3D character based on the following description: '" + image_content + "'. Use the implied theme and tone to guide the choice of location.",
+            "2. Apply colors that complement the character's theme and mood, ensuring the color scheme is harmonious and enhances the character's presence.",
+            "3. The background should be plain white, with no objects, textures, or additional elements.",
+            "4. Ensure the location has a playful, childlike atmosphere, suitable for the character's theme, while still being recognizable as a specific place.",
+            "5. The background should be visually centered and balanced, with key elements or focus areas positioned towards the center of the image to draw attention to the character's placement in the scene."
         ]
         prompt = "\n".join(lines)
         response = openai.images.generate(
@@ -193,11 +192,12 @@ class TSR(BaseModule):
 
     def generate_image_from_text(self, text: str) -> Image.Image:
         lines = [
-            "Generate one background image based on the following instructions:",
-            "1. The background should depict a location or setting that reflects the mood, colors, and overall atmosphere of the input image content. Use the implied theme and tone to guide the choice of location.",
-            "2. Apply colors that complement the image content and align with the overall mood, ensuring the color scheme is harmonious.",
-            "3. Do not include any specific objects or characters from the input image; focus on creating a cohesive environment or scene that captures the intended feeling.",
-            "4. Ensure the location has a playful, childlike atmosphere, suitable for the theme, while still being recognizable as a specific place."
+            "Generate one centered background image based on the following instructions:",
+            "1. The background should depict a location or setting that reflects the mood, colors, and overall atmosphere associated with a 3D character based on the following description: '" + text + "'. Use the implied theme and tone to guide the choice of location.",
+            "2. Apply colors that complement the character's theme and mood, ensuring the color scheme is harmonious and enhances the character's presence.",
+            "3. The background should be plain white, with no objects, textures, or additional elements.",
+            "4. Ensure the location has a playful, childlike atmosphere, suitable for the character's theme, while still being recognizable as a specific place.",
+            "5. The background should be visually centered and balanced, with key elements or focus areas positioned towards the center of the image to draw attention to the character's placement in the scene."
         ]
         prompt = "\n".join(lines)
         response = openai.images.generate(
@@ -214,7 +214,7 @@ class TSR(BaseModule):
         image = Image.open(BytesIO(image_response.content))
         image = remove_background(image, rembg_session)
         return image
-    
+
     def generate_image_with_background(self, image_content, text: str) -> Image.Image:
         lines = [
             "1. The background should depict a location or setting that reflects the mood, colors, and overall atmosphere of the input image content.",
