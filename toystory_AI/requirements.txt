@@ -207,13 +207,13 @@ tinycss2==1.3.0
 tokenizers==0.19.1
 tomli==2.0.1
 tomlkit==0.12.0
-torch==2.1.0
-torchaudio==2.1.0
-torchdata==0.7.0
-torchmcubes @ git+https://github.com/tatsy/torchmcubes.git@cb81cddece46a8a126b08f7fbb9742f8605eefab
-torchmetrics==1.4.1
-torchtext==0.16.0
-torchvision==0.16.0
+# torch==2.1.0
+# torchaudio==2.1.0
+# torchdata==0.7.0
+# torchmcubes @ git+https://github.com/tatsy/torchmcubes.git@cb81cddece46a8a126b08f7fbb9742f8605eefab
+# torchmetrics==1.4.1
+# torchtext==0.16.0
+# torchvision==0.16.0
 tornado==6.4.1
 tqdm==4.66.5
 traitlets==5.14.3
